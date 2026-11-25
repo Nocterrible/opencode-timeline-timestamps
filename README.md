@@ -2,6 +2,8 @@
 
 Wall-clock stamps beside every message in [OpenCode](https://opencode.ai) Desktop's chat timeline — so you can see *when* each turn actually happened.
 
+> **Status: unsupported, and knowingly outside the contract.** OpenCode's plugin guide reserves the timeline for core — `session.header` is the only timeline surface it exposes to plugins. This plugin deliberately works outside that surface: it injects global CSS and decorates the app's own DOM. It is not endorsed by upstream, it depends on internal `data-*` attributes, and any Desktop update may break it. See [LIMITATIONS](#limitations--read-before-relying-on-this) before relying on it.
+
 ![Default stamps: left-aligned above assistant/tool rows, right-aligned with the user bubble](docs/stamps.png)
 
 - **Display-only.** The stamp is a DOM decoration drawn in the window process from message metadata the app already has. No session hooks, no prompt or context mutation, no server-side text edits: the model can never receive these timestamps.
@@ -69,6 +71,8 @@ Delete the plugin entry from `opencode.json` (or add `"-timeline-timestamps"` to
 ## LIMITATIONS — read before relying on this
 
 - **This is outside the supported plugin contract.** Upstream's own GUI-plugin doctrine for the timeline is, verbatim, **"No timeline work."** — `session.header` is the only timeline surface the host hands plugins. This plugin therefore injects global CSS and mutates the app's own timeline DOM instead of using a supported extension point: nothing here can corrupt your sessions (the plugin writes no data), but the app update cycle is free to reflow the DOM this decorates, and no upstream change owes this plugin a compatibility pass.
+- **The request exists and was declined.** Issue [#44588](https://github.com/anomalyco/opencode/issues/44588) ("Date time format in the conversation") was closed as *not planned*, and [PR #45590](https://github.com/anomalyco/opencode/pull/45590) (a timestamp on the message meta line) was closed unmerged. The public SDK docs, <https://opencode.ai/docs/build/plugins/gui>, list the supported surfaces and include no message row. The doctrine line quoted above lives in the repo guide `packages/gui-plugins/README.md`, "Runtime rules".
+- **The app already shows a per-message time — behind a menu.** Hover a user message, click the chevron ("More actions"), and the first row is `Today, 10:05 AM`. That is useful once; it is useless for scanning an overnight session. This plugin's only job is to surface that number without the click, on every row type.
 - **It depends on internal `data-*` attributes** (`data-timeline-row`, `data-message-id`, `data-timeline-part-id(s)`, `data-slot="session-turn-message-container"`). When some future Desktop update renames those, stamps vanish or misplace — by design of the surface, not by bug in this implementation. The repair is a few selector edits; expect occasional attention.
 - **Tested on OpenCode Desktop 2.4.1 (Windows).** The GUI plugin API is explicitly experimental (the `-experimental` in `gui-experimental` says so); other versions are unproven. The config-reload path and the `github:` install were each verified only on that build.
 - **`[time unavailable]` is a designed failure mode, not a defect** — see [Failure mode](#failure-mode).
