@@ -77,7 +77,6 @@ Delete the plugin entry from `opencode.json` (or add `"-timeline-timestamps"` to
 - **Tested on OpenCode Desktop 2.4.1 (Windows).** The GUI plugin API is explicitly experimental (the `-experimental` in `gui-experimental` says so); other versions are unproven. The config-reload path and the `github:` install were each verified only on that build.
 - **`[time unavailable]` is a designed failure mode, not a defect** — see [Failure mode](#failure-mode).
 - **No upstream endorsement.** "OpenCode" and its timeline layout belong to the OpenCode project; this is an independent plugin and nothing here reflects official roadmap.
-- Screenshot hygiene: the image above is a real session of the author's, so it shows other conversations' text. Replace it before taking the repo public.
 
 ## Notes for maintainers
 
