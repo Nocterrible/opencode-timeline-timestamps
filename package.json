@@ -1,6 +1,8 @@
 {
   "name": "timeline-timestamps",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "description": "Wall-clock stamps beside OpenCode Desktop timeline messages. Display-only: the model never sees them.",
+  "license": "MIT"
 }
