@@ -1,9 +1,9 @@
 // GUI half: draws a wall-clock stamp beside every timeline message row.
-// Display-only by design - the model never sees these times. Built as one
-// CommonJS bundle because OpenCode Desktop evaluates this file verbatim
-// (see README "Notes for maintainers"): splitting into sibling requires
-// depends on loader behavior we have not measured, and a build step would
-// reintroduce the package.json `exports` trap. The extra length buys a
+// Display-only by design - the model never sees these times. Shipped as one
+// hand-written CommonJS bundle because OpenCode Desktop evaluates this file
+// verbatim (see README "Notes for maintainers"). Splitting it into sibling
+// requires would gamble on loader behavior we have not measured, and a build
+// step reintroduces the package.json `exports` trap. The extra length buys a
 // zero-dependency plugin the owner can read top to bottom.
 const { Plugin, Style } = require("@opencode/plugin/gui")
 const { createEffect, createMemo, onCleanup } = require("solid-js")
@@ -92,11 +92,13 @@ function partsOf(date, utc) {
 
 // zone spec -> (ms) -> parts | undefined; NULL for an invalid spec.
 function partsReader(spec) {
-  const name = typeof spec === "string" ? spec.trim() : ""
+  if (spec !== undefined && typeof spec !== "string") return null
+  const name = spec === undefined ? "" : spec.trim()
   if (name === "" || name.toLowerCase() === "local") return (ms) => partsOf(new Date(ms), false)
   if (name.toUpperCase() === "UTC") return (ms) => partsOf(new Date(ms), true)
-  const fixed = /^([+-])(\d{1,2}):(\d{2})$/.exec(name)
+  const fixed = /^([+-])(\d{1,2}):([0-5]\d)$/.exec(name)
   if (fixed) {
+    if (Number(fixed[2]) > 14) return null
     const minutes = Number(fixed[2]) * 60 + Number(fixed[3])
     const offset = (fixed[1] === "-" ? -minutes : minutes) * 60000
     return (ms) => partsOf(new Date(ms + offset), true)
@@ -146,11 +148,12 @@ function partsReader(spec) {
 const DEFAULT_TIME_URL = "https://timeapi.io/api/time/current/zone?timeZone=UTC"
 
 function toEpoch(value) {
-  if (typeof value === "number" && Number.isFinite(value)) return value < 1e11 ? value * 1000 : value
+  if (typeof value === "number" && Number.isFinite(value)) return Math.abs(value) < 1e11 ? value * 1000 : value
   if (typeof value === "string") {
     const text = value.trim()
-    if (/^-?\d+(\.\d+)?$/.test(text)) return Number(text) < 1e11 ? Number(text) * 1000 : Number(text)
-    const withZone = /(\d)(Z|[+-]\d{2}(:\d{2})?)$/i.test(text) ? text : text + "Z"
+    if (/^-?\d+(\.\d+)?$/.test(text)) return Math.abs(Number(text)) < 1e11 ? Number(text) * 1000 : Number(text)
+    // Already zoned (Z, +HH:MM, +HHMM, -HH)? Leave it to Date.parse. Naive ISO gets UTC.
+    const withZone = /(\d)(Z|[+-]\d{2}(?::?\d{2})?)$/i.test(text) ? text : text + "Z"
     const parsed = Date.parse(withZone)
     return Number.isNaN(parsed) ? undefined : parsed
   }
@@ -206,6 +209,7 @@ function createClock(options, fetchImpl, now, timers) {
   const syncEvery = Math.max(1, Number(options.syncMinutes) || 60) * 60000
   let offset = source === "network" ? undefined : 0
   let timer = 0
+  let stopped = false
 
   const schedule = (delay) => {
     clockTimers.clear(timer)
@@ -219,12 +223,15 @@ function createClock(options, fetchImpl, now, timers) {
   async function sync() {
     try {
       const response = await fetchImpl(url, { cache: "no-store", signal: AbortSignal.timeout(5000) })
+      if (!response.ok) throw new Error("time endpoint HTTP " + response.status)
       const remote = parseTimePayload(await response.text())
       if (remote === undefined) throw new Error("unrecognized time payload")
+      if (stopped) return
       offset = remote - now()
       console.info("[timeline-timestamps] clock synced:", url, "offset:", offset, "ms")
       schedule(syncEvery)
     } catch (error) {
+      if (stopped) return
       console.error("[timeline-timestamps] network clock failed:", url, error)
       schedule(offset === undefined ? 60000 : syncEvery)
     }
@@ -239,6 +246,7 @@ function createClock(options, fetchImpl, now, timers) {
       if (source === "network") void sync()
     },
     stop() {
+      stopped = true
       clockTimers.clear(timer)
       timer = 0
     },

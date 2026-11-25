@@ -113,10 +113,16 @@ assert(t.parseTimePayload(apiBody) === Date.UTC(2026, 10, 25, 17, 55, 6, 898), "
 assert(t.parseTimePayload(JSON.stringify({ unixtime: 1000000000 })) === 1e12, "unixtime seconds")
 assert(t.parseTimePayload(JSON.stringify({ epoch: 1700000000000 })) === 1700000000000, "epoch ms")
 assert(t.parseTimePayload(JSON.stringify({ dateTime: "2026-11-25T17:55:06" })) === Date.UTC(2026, 10, 25, 17, 55, 6), "naive ISO assumed UTC")
+assert(t.parseTimePayload(JSON.stringify({ dateTime: "2026-11-25T17:55:06+02:00" })) === Date.UTC(2026, 10, 25, 15, 55, 6), "colon-offset ISO honored")
+assert(t.parseTimePayload(JSON.stringify({ dateTime: "2026-11-25T17:55:06+0200" })) === Date.UTC(2026, 10, 25, 15, 55, 6), "compact-offset ISO honored (gate #2)")
 assert(t.parseTimePayload("1000000000") === 1e12, "bare numeric string (seconds)")
 assert(t.parseTimePayload("not a time") === undefined, "garbage text")
 assert(t.parseTimePayload("") === undefined, "empty text")
 assert(t.parseTimePayload(JSON.stringify([1, 2, 3])) === undefined, "JSON array")
+assert(t.partsReader("+99:00") === null, "impossible fixed offset rejected (gate #6)")
+assert(t.partsReader("+02:75") === null, "impossible offset minutes rejected (gate #6)")
+assert(t.partsReader("+15:00") === null, "offset beyond ±14 rejected (gate #6)")
+assert(t.partsReader(5) === null, "non-string timezone rejected (gate #5)")
 
 // 9. system source: no sync, offset 0.
 const sys = t.createClock({ source: "system" }, () => { throw new Error("no fetch in system mode") }, () => 5e12, { set: () => 1, clear: () => {} })
@@ -137,7 +143,7 @@ async function clockSection() {
   // fetch pins the offset; the timeUrl override is recorded by the fake.
   const net = t.createClock(
     { source: "network", timeUrl: "https://example.test/time", syncMinutes: 2 },
-    (url) => { calls.push(url); return Promise.resolve({ text: () => Promise.resolve(body) }) },
+    (url) => { calls.push(url); return Promise.resolve({ ok: true, text: () => Promise.resolve(body) }) },
     () => fakeNow,
     timers,
   )
@@ -158,22 +164,26 @@ async function clockSection() {
     calls2.push(url)
     const next = scripted.shift()
     if (next === "fail") return Promise.reject(new Error("network down"))
-    return Promise.resolve({ text: () => Promise.resolve(body) })
+    if (next === "http404") return Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve(JSON.stringify({ timestamp: 1000000000 })) })
+    return Promise.resolve({ ok: true, text: () => Promise.resolve(body) })
   }, () => fakeNow, { set: (fn, ms) => seen.push(ms), clear: () => {} })
   assert(net2.stampMs(1234) === undefined, "retry: unavailable before first sync")
   scripted.push("fail")
   await net2.sync()
   assert(net2.stampMs(1234) === undefined, "retry: still unavailable after failed first sync")
   assert(seen.length === 1 && seen[0] === 60000, "retry: 60s retry scheduled")
+  scripted.push("http404")
+  await net2.sync()
+  assert(net2.stampMs(1234) === undefined, "404 body with timestamp must NOT seed the offset (gate #4)")
   scripted.push("ok")
   await net2.sync()
   assert(net2.stampMs(1234) === 1234 + 6 * 3600000, "retry: offset applied after success")
-  assert(seen.length === 2 && seen[1] === 120000, "retry: next sync at syncMinutes*60000")
+  assert(seen.length === 3 && seen[2] === 120000, "retry: next sync at syncMinutes*60000")
   scripted.push("fail")
   await net2.sync()
   assert(net2.stampMs(1234) === 1234 + 6 * 3600000, "retry: failed resync keeps last offset")
-  assert(seen.length === 3 && seen[2] === 120000, "retry: resync failure back to syncMinutes cadence")
-  assert(calls2.length === 3 && calls2.every((u) => u === t.DEFAULT_TIME_URL), "default URL used when timeUrl omitted")
+  assert(seen.length === 4 && seen[3] === 120000, "retry: resync failure back to syncMinutes cadence")
+  assert(calls2.length === 4 && calls2.every((u) => u === t.DEFAULT_TIME_URL), "default URL used when timeUrl omitted")
 
   // 12. Unknown source: behaves as system, with one console.error warning.
   const errors = []
@@ -183,6 +193,24 @@ async function clockSection() {
   console.error = realError
   assert(ntp.stampMs(1234) === 1234, "ntp: behaves as system")
   assert(errors.length === 1 && errors[0].includes("ntp"), "ntp: one console.error warning")
+
+  // 13. stop() while a sync is in flight must not resurrect the chain (gate #3):
+  // the continuation lands after teardown and must schedule nothing.
+  const seen13 = []
+  const realError13 = console.error
+  console.error = (...args) => { errors.push(args.join(" ")) }
+  let release
+  const net13 = t.createClock({ source: "network" }, () => new Promise((resolve) => {
+    release = () => resolve({ ok: true, text: () => Promise.resolve(body) })
+  }), () => fakeNow, { set: (fn, ms) => { seen13.push(ms); return 1 }, clear: () => {} })
+  net13.start()
+  net13.stop()
+  release()
+  await new Promise((resolve) => setImmediate(resolve))
+  await new Promise((resolve) => setImmediate(resolve))
+  console.error = realError13
+  assert(seen13.length === 0, "stop: in-flight sync schedules no resync")
+  assert(net13.stampMs(1234) === undefined, "stop: discarded late success leaves stamps unavailable")
 }
 
 clockSection()
