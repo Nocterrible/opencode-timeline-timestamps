@@ -32,6 +32,10 @@ const CSS = `
   color: var(--v2-state-fg-warning, #b07d00);
   opacity: 1;
 }
+.oc-tstamp[data-role="user"] {
+  width: 100%;
+  justify-content: flex-end;
+}
 `
 
 // ---------------------------------------------------------------------------
@@ -270,7 +274,7 @@ function stampOf(container) {
   return container.querySelector(":scope > ." + STAMP)
 }
 
-function showStamp(row, text, missing) {
+function showStamp(row, text, missing, role) {
   const container = containerFor(row)
   let stamp = stampOf(container)
   if (!stamp) {
@@ -280,6 +284,8 @@ function showStamp(row, text, missing) {
     container.prepend(stamp)
   }
   if (stamp.textContent !== text) stamp.textContent = text
+  if (role) stamp.setAttribute("data-role", role)
+  else stamp.removeAttribute("data-role")
   if (missing) stamp.setAttribute("data-missing", "")
   else stamp.removeAttribute("data-missing")
 }
@@ -364,13 +370,14 @@ module.exports.default = Plugin.define({
           return
         }
 
+        const role = tag === "UserMessage" ? "user" : undefined
         if (text === undefined) {
-          showStamp(row, MISSING, true)
+          showStamp(row, MISSING, true, role)
           return
         }
 
         if (id) stamped.add(id)
-        showStamp(row, text, false)
+        showStamp(row, text, false, role)
       })
     }
 
