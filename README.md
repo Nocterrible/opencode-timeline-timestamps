@@ -47,10 +47,10 @@ Attach `options` to the plugin entry. Changing options reloads the plugin (docum
 | Option | Default | Values |
 | --- | --- | --- |
 | `format` | `"compact"` | Preset `"compact"` → `[11-25 9:40 AM]`, `"time-only"` → `[9:40 AM]`, `"iso"` → `[2026-11-25 09:40:12]`, or a **token pattern**. Tokens: `YYYY MM DD HH hh h mm ss A`; every other character is literal (so `"MM/DD HH:mm"` and `"A h:mm"` do what you'd write). |
-| `timezone` | `"local"` | The renderer's zone; `"UTC"`; a fixed offset `"+HH:MM"` / `"-HH:MM"` (hours ≤ 14, minutes 00–59); or any IANA zone name (`"America/Denver"`, `"Asia/Kolkata"`, `"Europe/Berlin"`, …). An invalid name falls back to `local` and says so in the devtools console. |
+| `timezone` | `"local"` | The renderer's zone; `"UTC"`; a fixed offset `"+HH:MM"` / `"-HH:MM"` (one- or two-digit hours 0–14, minutes 00–59); or any IANA zone name (`"America/Denver"`, `"Asia/Kolkata"`, `"Europe/Berlin"`, …). An invalid name falls back to `local` and says so in the devtools console. |
 | `source` | `"system"` | `"system"` — stamp the message's `time.created`, which is the OpenCode **server's** clock. `"network"` — additionally calibrate against an HTTP time endpoint (see below). |
-| `timeUrl` | `https://timeapi.io/api/time/current/zone?timeZone=UTC` | With `source: "network"`: any URL returning a parseable time — epoch seconds or ms (numbers or numeric strings), `{"epoch":…}` / `{"unixtime":…}` / `{"epoch_ms":…}` / `{"timestamp":…}`, an ISO-8601 string (with or without a `Z`/`±HH:MM`/`±HHMM` suffix — naive ISO is assumed UTC) under `dateTime`/`utc`/`iso`, or a timeapi.io-style `{"year":…,"month":…,"day":…}` body. |
-| `syncMinutes` | `60` | Resync period for the network calibration (minimum 1). |
+| `timeUrl` | `https://timeapi.io/api/time/current/zone?timeZone=UTC` | With `source: "network"`: any URL returning a parseable time — epoch seconds or ms (numbers or numeric strings), e.g. `epoch` / `epoch_ms` / `epochMs` / `unixtime` / `timestamp` fields, an ISO-8601 string (with or without a `Z`/`±HH:MM`/`±HHMM` suffix — naive ISO is assumed UTC) under `dateTime`/`utc`/`iso`, or a timeapi.io-style `{"year":…,"month":…,"day":…}` body. |
+| `syncMinutes` | `60` | Resync period for the network calibration; values below 1 clamp to 1 minute (0 or unset means the 60-minute default). |
 
 Notes on the choices:
 
